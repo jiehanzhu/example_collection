@@ -21,40 +21,39 @@ class LiftChart:
         self.data["cumul_exposure"] = np.cumsum(self.data["exposure"]) / np.sum(
             self.data["exposure"]
         )
-        self.data["residual_total"] = (self.data["y"] - self.data["mean_y"]).pow(2)
-        self.data["residual_explained"] = (self.data["yhat"] - self.data["mean_y"]).pow(2)
+        self.data["ss_total"] = (self.data["actual_y"] - self.data["mean_y"]).pow(2)
+        self.data["ss_residual"] = (self.data["predicted_y"] - self.data["actual_y"]).pow(2)
 
     def append_bucket(self, n_quantiles: int):
         # Create the quantiles using exposure_frac
         bin_width = 1 / float(n_quantiles)
         self.data["bin"] = self.data["cumul_exposure"].apply(lambda x: x // bin_width)
 
-    def quantile_data(self, n_quantiles: int = 10, chart: str = "lift"):
+    def quantile_data_r_square(self, n_quantiles: int = 10):
+        """
+        Use the whole dataset mean and whole dataset as the denominator, but only include quantile data in numerator.
+        """
+        self.append_bucket(n_quantiles)
+        data_agg = self.data.groupby("bin")[["ss_total", "ss_residual", "exposure"]].sum().reset_index()
+        data_agg["exposure"] /= sum(data_agg["exposure"])
+
+        data_agg["r_square"] = (data_agg["ss_total"] - data_agg["ss_residual"]) / sum(data_agg["ss_total"])
+        data_agg["cumul_r_square"] = 1 - np.cumsum(data_agg["ss_residual"]) / sum(data_agg["ss_total"])
+        return data_agg[["bin", "exposure", 'r_square', "cumul_r_square"]].to_dict('list')
+
+    def quantile_data_lift(self, n_quantiles: int = 10):
         """
         Divides data into n_quantiles, calculating the mean for each
         quantile. The data are split using the cumulated exposure, ensuring that
         each quantile has a balanced amount of exposure. This is described in
         Generalized Linear Models for Insurance Rating by Goldburd, Khare, Tevet.
         """
-        if chart == "lift":
-            columns = ["actual_y", "predicted_y"]
-        elif chart == "r_square":
-            columns = ["residual_total", "residual_explained"]
-        else:
-            raise ValueError("chart must be either 'lift' or 'r_square'")
-
         self.append_bucket(n_quantiles)
-        data_agg = self.data.groupby("bin")[columns + ["exposure"]].sum().reset_index()
-        for col in columns:
+        data_agg = self.data.groupby("bin")[["actual_y", "predicted_y", "exposure"]].sum().reset_index()
+        for col in ["actual_y", "predicted_y"]:
             data_agg[col] = data_agg[col] / data_agg["exposure"]
         data_agg["exposure"] /= sum(data_agg["exposure"])
-
-        if chart == "r_square":
-            data_agg["r_square"] = 1 - data_agg["residual_explained"] / data_agg["residual_total"]
-            data["cumul_r_square"] = np.cumsum(self.data["r_square"]) / np.sum(
-                self.data["exposure"]
-            )
-        return data_agg[["bin", "exposure"] + columns].to_dict('list')
+        return data_agg[["bin", "exposure", "actual_y", "predicted_y"]].to_dict('list')
 
     def quantile_plot(self, n_quantiles=10, chart: str = "lift",
                       ) -> plt.Figure:
@@ -62,7 +61,7 @@ class LiftChart:
         Plot or save the lift chart with selected number of buckets.
         """
         if chart == "lift":
-            title= "Lift Chart"
+            quantile_dict = self.quantile_data_lift(n_quantiles)
             columns_label = {
                 "title":"Lift Chart",
                 "line_1": "actual_y",
@@ -72,19 +71,18 @@ class LiftChart:
                 "y_label": "Average Target in Quantile Range"
             }
         elif chart == "r_square":
-            title= "R Square Chart"
+            quantile_dict = self.quantile_data_r_square(n_quantiles)
             columns_label = {
-                "title": "Lift Chart",
-                "line_1": "actual_y",
-                "line_1_name": "True Target",
-                "line_2": "predicted_y",
-                "line_2_name": "Predicted Target",
-                "y_label": "Average Target in Quantile Range"
+                "title": "R Square Chart",
+                "line_1": "r_square",
+                "line_1_name": "Quantile R Square",
+                "line_2": "cumul_r_square",
+                "line_2_name": "Cumulative R Square",
+                "y_label": "R Square in Quantile Range"
             }
         else:
             raise ValueError("chart must be either 'lift' or 'r_square'")
 
-        quantile_dict = self.quantile_data(n_quantiles, chart)
         x = [(i + 0.5) / n_quantiles for i in range(n_quantiles)]
 
         # create plot
@@ -111,15 +109,10 @@ class LiftChart:
             label="Exposure",
         )
         ax.set_xlabel("Quantile", size=14)
-        ax.set_ylabel(columns_label["y_label"] size=14)
+        ax.set_ylabel(columns_label["y_label"], size=14)
         ax_dup.set_ylabel("Exposure", size=14)
         ax_dup.set_ylim([0, 1 / (n_quantiles // 3)])
-        ax.set_title(title, size=18)
+        ax.set_title(columns_label["title"], size=18)
         ax.legend()
         ax_dup.legend()
         return ax.figure
-
-
-# lift = QuantileRSquare(y_dev_log, yhat_dev_log)
-# lift_data = lift.quantile_data(n_quantiles=10)
-# ax = lift.quantile_plot(n_quantiles=10)
