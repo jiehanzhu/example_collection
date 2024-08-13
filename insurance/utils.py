@@ -21,8 +21,9 @@ class LiftChart:
         self.data["cumul_exposure"] = np.cumsum(self.data["exposure"]) / np.sum(
             self.data["exposure"]
         )
+        self.data["residual"] = (self.data["predicted_y"] - self.data["actual_y"])
         self.data["ss_total"] = (self.data["actual_y"] - self.data["mean_y"]).pow(2)
-        self.data["ss_residual"] = (self.data["predicted_y"] - self.data["actual_y"]).pow(2)
+        self.data["ss_residual"] = (self.data["residual"]).pow(2)
 
     def append_bucket(self, n_quantiles: int):
         # Create the quantiles using exposure_frac
@@ -55,8 +56,7 @@ class LiftChart:
         data_agg["exposure"] /= sum(data_agg["exposure"])
         return data_agg[["bin", "exposure", "actual_y", "predicted_y"]].to_dict('list')
 
-    def quantile_plot(self, n_quantiles=10, chart: str = "lift",
-                      ) -> plt.Figure:
+    def quantile_plot(self, n_quantiles: int = 10, chart: str = "lift") -> plt.Figure:
         """
         Plot or save the lift chart with selected number of buckets.
         """
