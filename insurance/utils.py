@@ -18,7 +18,7 @@ class LiftChart:
         self.data["actual_y"] = self.data["actual_y"] * self.data["exposure"]
         self.data["predicted_y"] = self.data["predicted_y"] * self.data["exposure"]
         self.data.sort_values(by="predicted_y", inplace=True)
-        self.data["cumul_exposure"] = np.cumsum(self.data["exposure"]) / np.sum(
+        self.data["cumulative_exposure"] = np.cumsum(self.data["exposure"]) / np.sum(
             self.data["exposure"]
         )
         self.data["residual"] = (self.data["predicted_y"] - self.data["actual_y"])
@@ -28,7 +28,7 @@ class LiftChart:
     def append_bucket(self, n_quantiles: int):
         # Create the quantiles using exposure_frac
         bin_width = 1 / float(n_quantiles)
-        self.data["bin"] = self.data["cumul_exposure"].apply(lambda x: x // bin_width)
+        self.data["bin"] = self.data["cumulative_exposure"].apply(lambda x: x // bin_width)
 
     def quantile_data_r_square(self, n_quantiles: int = 10):
         """
@@ -39,8 +39,8 @@ class LiftChart:
         data_agg["exposure"] /= sum(data_agg["exposure"])
 
         data_agg["r_square"] = (data_agg["ss_total"] - data_agg["ss_residual"]) / sum(data_agg["ss_total"])
-        data_agg["cumul_r_square"] = 1 - np.cumsum(data_agg["ss_residual"]) / sum(data_agg["ss_total"])
-        return data_agg[["bin", "exposure", 'r_square', "cumul_r_square"]].to_dict('list')
+        data_agg["cumulative_r_square"] = 1 - np.cumsum(data_agg["ss_residual"]) / sum(data_agg["ss_total"])
+        return data_agg[["bin", "exposure", 'r_square', "cumulative_r_square"]].to_dict('list')
 
     def quantile_data_lift(self, n_quantiles: int = 10):
         """
@@ -76,7 +76,7 @@ class LiftChart:
                 "title": "R Square Chart",
                 "line_1": "r_square",
                 "line_1_name": "Quantile R Square",
-                "line_2": "cumul_r_square",
+                "line_2": "cumulative_r_square",
                 "line_2_name": "Cumulative R Square",
                 "y_label": "R Square in Quantile Range"
             }
@@ -86,7 +86,7 @@ class LiftChart:
         x = [(i + 0.5) / n_quantiles for i in range(n_quantiles)]
 
         # create plot
-        fig, ax = plt.subplots(figsize=(12, 9))
+        _, ax = plt.subplots(figsize=(12, 9))
 
         ax.plot(x, quantile_dict[columns_label["line_1"]], ls="-", lw=3, label=columns_label["line_1_name"])
         clr = ax.lines[-1].get_color()
